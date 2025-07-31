@@ -1,4 +1,5 @@
-streamlit 
-pandas 
-openpyxl 
-gdown 
+streamlit
+pandas
+openpyxl
+gdown
+gspread
