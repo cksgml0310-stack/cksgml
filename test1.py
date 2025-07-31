@@ -1,8 +1,24 @@
 import streamlit as st
+import pandas as pd
+from datetime import datetime
 
-st.title("👋 나의 첫 Streamlit 앱")
-st.write("안녕하세요! Streamlit에 오신 걸 환영합니다.")
+st.title("📰 오늘의 AI 뉴스")
+today = datetime.now().strftime("%Y년 %m월 %d일")
+st.markdown(f"#### 📅 {today}")
 
-name = st.text_input("이름을 입력하세요")
-if name:
-    st.success(f"{name}님, 반가워요!")
+uploaded_file = st.file_uploader("엑셀 파일 업로드", type=["xlsx"])
+
+if uploaded_file:
+    df = pd.read_excel(uploaded_file)
+    categories = sorted(df['category'].unique())
+
+    for category in categories:
+        st.header(f"📂 {category}")
+        filtered = df[df['category'] == category]
+
+        for _, article in filtered.iterrows():
+            with st.expander(f"{article['title']} ({article['source']})"):
+                st.write(article['summary'])
+                st.markdown(f"[🔗 기사 링크]({article['url']})")
+else:
+    st.info("위에서 articles.xlsx 파일을 업로드해주세요.")
