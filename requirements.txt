@@ -3,3 +3,4 @@ pandas
 openpyxl
 gdown
 gspread
+oauth2client
