@@ -261,7 +261,7 @@ if 'generated_report' in st.session_state:
     with download_col:
         report_bytes = st.session_state.generated_report.encode('utf-8')
         st.download_button(
-            label="📄 보고서 다운로드",
+            label="📄 다운",
             data=report_bytes,
             file_name=f"SK_networks_뉴스_보고서_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
             mime="text/plain"
