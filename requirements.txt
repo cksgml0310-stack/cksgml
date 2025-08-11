@@ -4,3 +4,4 @@ openpyxl
 gdown
 gspread
 oauth2client
+google-generativeai
