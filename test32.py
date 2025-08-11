@@ -67,9 +67,11 @@ df = load_data()
 if df.empty:
     st.stop()
 
-# --- 제목 및 오늘 날짜 표시 ---
+# NOTE: 'category' 열의 빈칸을 '(기타)'로 채우기
+df['category'] = df['category'].fillna('(기타)')
+
+# --- 제목 표시 ---
 st.title("📰 SK networks 뉴스")
-st.markdown(f"### 📅 오늘 날짜: {datetime.now().strftime('%Y-%m-%d')}")
 st.markdown("---")
 
 # --- 필터 영역 (2개의 컬럼으로 분할, 비율 1:1) ---
@@ -83,20 +85,17 @@ with filter_col1:
 # 2. 날짜 필터 (달력 위젯)
 with filter_col2:
     valid_dates = df["date"].dropna()
-    if not valid_dates.empty:
-        min_data_date = valid_dates.min().date()
-        # min_value와 max_value를 수정하여 필터 범위를 확장
-        start_date, end_date = st.date_input(
-            "🗓️ 날짜 범위 선택",
-            value=(min_data_date, datetime.now().date()), # 오늘 날짜까지 표시
-            min_value=min_data_date, # 데이터의 가장 오래된 날짜부터 선택 가능
-            max_value=datetime.now().date() # 오늘 날짜까지 선택 가능
+    # 시작일과 종료일을 한 줄에 나란히 배치
+    date_start_col, date_end_col = st.columns(2)
+    with date_start_col:
+        start_date = st.date_input(
+            "🗓️ 시작일",
+            value=valid_dates.min().date() if not valid_dates.empty else datetime.now().date()
         )
-    else:
-        today = datetime.now().date()
-        start_date, end_date = st.date_input(
-            "🗓️ 날짜 범위 선택",
-            value=(today, today)
+    with date_end_col:
+        end_date = st.date_input(
+            "🗓️ 종료일",
+            value=valid_dates.max().date() if not valid_dates.empty else datetime.now().date()
         )
 
 # --- 검색 기능 ---
@@ -118,7 +117,6 @@ if start_date and end_date:
     if len(filtered_df) == 0:
         filtered_by_date = True
 
-# 검색 쿼리가 있는 경우에만 검색
 if search_query:
     filtered_df = filtered_df[
         filtered_df["title"].str.contains(search_query, case=False, na=False) |
@@ -143,7 +141,7 @@ if not filtered_df.empty:
                         components.html(
                             f'<iframe src="{row["url"]}" width="100%" height="600px"></iframe>',
                             height=600,
-                            scrolling=True
+                            scrolling=False # 스크롤 비활성화
                         )
                         st.info("미리보기가 보이지 않는다면, 해당 웹사이트에서 미리보기 기능을 지원하지 않는 것일 수 있습니다.")
                 st.markdown("---")
