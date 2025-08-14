@@ -9,9 +9,15 @@ import re
 st.set_page_config(layout="wide")
 
 # 제미나이 API 키 설정
-# st.secrets에서 GOOGLE_API_KEY를 직접 가져와 바로 설정합니다.
-genai.configure(api_key=st.secrets.GOOGLE_API_KEY)
-gemini_model = genai.GenerativeModel('gemini-1.5-pro')
+try:
+    genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
+    gemini_model = genai.GenerativeModel('gemini-1.5-flash')
+except KeyError:
+    st.error("API 키를 찾을 수 없습니다. .streamlit/secrets.toml 파일을 확인해 주세요.")
+    st.stop()
+except Exception as e:
+    st.error(f"제미나이 설정 중 오류 발생: {e}")
+    st.stop()
 
 # --- CSS 스타일 적용 (전체 너비 강제 적용) ---
 st.markdown("""
@@ -64,6 +70,7 @@ st.markdown("""
         }
     </style>
 """, unsafe_allow_html=True)
+
 
 # --- 구글 스프레드시트 CSV URL ---
 CSV_URL = "https://docs.google.com/spreadsheets/d/14I9HkPiBhKs6nXLt6kEBalQHeasrwINWshFDghTHbZE/gviz/tq?tqx=out:csv&sheet=Sheet1"
@@ -218,16 +225,37 @@ else:
     {articles_text}
     """
     
-    if st.button("✨ 트렌드 분석 시작"):
-        with st.spinner("제미나이가 뉴스 트렌드를 분석하고 있습니다..."):
-            try:
-                response = gemini_model.generate_content(analysis_prompt)
-                st.session_state.analysis_title = f"📰 {date_prefix} {topic_value} 트렌드"
-                st.session_state.analysis_result = response.text
-            except Exception as e:
-                st.error(f"제미나이 API 호출 중 오류 발생: {e}")
-
-    if 'analysis_result' in st.session_state and st.session_state.analysis_result:
+    analyze_btn_col, download_col = st.columns(2)
+    
+    with analyze_btn_col:
+        if st.button("✨ 트렌드 분석 시작"):
+            with st.spinner("제미나이가 뉴스 트렌드를 분석하고 있습니다..."):
+                try:
+                    response = gemini_model.generate_content(analysis_prompt)
+                    st.session_state.analysis_title = f"📰 {date_prefix} {topic_value} 트렌드"
+                    st.session_state.analysis_result = response.text
+                except Exception as e:
+                    st.error(f"제미나이 API 호출 중 오류 발생: {e}")
+    
+    with download_col:
+        if st.button("📝 보고서 만들기"):
+            with st.spinner("보고서를 생성하고 있습니다..."):
+                analysis_result_for_report = st.session_state.get('analysis_result', None)
+                if analysis_result_for_report:
+                    generate_report(filtered_df, analysis_result_for_report)
+                else:
+                    st.warning("먼저 '트렌드 분석'을 실행하여 분석 결과를 생성해 주세요.")
+                    
+        if 'generated_report' in st.session_state and st.session_state.generated_report:
+            report_bytes = st.session_state.generated_report.encode('utf-8')
+            st.download_button(
+                label="📄 보고서 다운로드",
+                data=report_bytes,
+                file_name=f"SK_networks_뉴스_보고서_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
+                mime="text/plain"
+            )
+            
+    if 'analysis_result' in st.session_state:
         st.subheader(st.session_state.analysis_title)
         
         summary_lines = st.session_state.analysis_result.split('\n')
@@ -241,31 +269,10 @@ else:
         list_html += '</ol>'
         st.markdown(list_html, unsafe_allow_html=True)
         
-        # '보고서 만들기' 버튼
-        if st.button("📝 보고서 만들기"):
-            with st.spinner("보고서를 생성하고 있습니다..."):
-                analysis_result_for_report = st.session_state.get('analysis_result', None)
-                if analysis_result_for_report:
-                    generate_report(filtered_df, analysis_result_for_report)
-                else:
-                    st.warning("먼저 '트렌드 분석'을 실행하여 분석 결과를 생성해 주세요.")
-                    
 st.markdown("---")
-
 if 'generated_report' in st.session_state:
-    report_col, download_col = st.columns([1, 0.2])
-    with report_col:
-        st.subheader("📄 보고서")
-        st.markdown(f'<div class="report-box">{st.session_state.generated_report}</div>', unsafe_allow_html=True)
-    
-    with download_col:
-        report_bytes = st.session_state.generated_report.encode('utf-8')
-        st.download_button(
-            label="📄 보고서 다운로드",
-            data=report_bytes,
-            file_name=f"SK_networks_뉴스_보고서_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
-            mime="text/plain"
-        )
+    st.subheader("📄 생성된 보고서")
+    st.markdown(f'<div class="report-box">{st.session_state.generated_report}</div>', unsafe_allow_html=True)
 
 st.markdown("---")
 

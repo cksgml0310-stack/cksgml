@@ -9,11 +9,17 @@ import re
 st.set_page_config(layout="wide")
 
 # 제미나이 API 키 설정
-# st.secrets에서 GOOGLE_API_KEY를 직접 가져와 바로 설정합니다.
-genai.configure(api_key=st.secrets.GOOGLE_API_KEY)
-gemini_model = genai.GenerativeModel('gemini-1.5-pro')
+try:
+    genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
+    gemini_model = genai.GenerativeModel('gemini-1.5-flash')
+except KeyError:
+    st.error("API 키를 찾을 수 없습니다. .streamlit/secrets.toml 파일을 확인해 주세요.")
+    st.stop()
+except Exception as e:
+    st.error(f"제미나이 설정 중 오류 발생: {e}")
+    st.stop()
 
-# --- CSS 스타일 적용 (전체 너비 강제 적용) ---
+# --- CSS 스타일 및 JS 라이브러리 로드 ---
 st.markdown("""
     <style>
         body {
@@ -54,16 +60,25 @@ st.markdown("""
             line-height: 1.8;
             margin-bottom: 10px;
         }
-        
-        .report-box {
-            background-color: #f8f9fa;
-            border: 1px solid #dee2e6;
-            border-radius: 5px;
-            padding: 20px;
-            margin-top: 20px;
-        }
     </style>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script>
+        function saveAsJpg() {
+            var element = document.body;
+            html2canvas(element, { scale: 2 }).then(function(canvas) {
+                var imgData = canvas.toDataURL('image/jpeg', 1.0); // 1.0은 퀄리티 (0.0~1.0)
+                
+                var link = document.createElement('a');
+                link.download = 'streamlit_report.jpg';
+                link.href = imgData;
+                link.click();
+            });
+        }
+    </script>
 """, unsafe_allow_html=True)
+
 
 # --- 구글 스프레드시트 CSV URL ---
 CSV_URL = "https://docs.google.com/spreadsheets/d/14I9HkPiBhKs6nXLt6kEBalQHeasrwINWshFDghTHbZE/gviz/tq?tqx=out:csv&sheet=Sheet1"
@@ -97,38 +112,18 @@ def clear_analysis_result():
         del st.session_state.analysis_result
     if 'analysis_title' in st.session_state:
         del st.session_state.analysis_title
-    if 'generated_report' in st.session_state:
-        del st.session_state.generated_report
-
-# --- 보고서 생성 함수 ---
-def generate_report(filtered_df, analysis_result):
-    articles_text = ""
-    for _, row in filtered_df.iterrows():
-        articles_text += f"제목: {row['title']}\n출처: {row['source']} ({row['date'].strftime('%Y-%m-%d')})\n요약: {row.get('summary', '요약 없음')}\nURL: {row.get('url', '없음')}\n\n"
-
-    report_prompt = f"""
-    [트렌드 분석 결과]
-    {analysis_result}
-    
-    [필터링된 뉴스 기사 목록]
-    {articles_text}
-    
-    위 트렌드 분석 결과와 뉴스 기사 목록을 바탕으로, 다음 내용을 포함하는 보고서를 500자 이내로 작성해 주세요.
-    1. 주요 뉴스 내용 요약
-    2. 나타나는 주요 트렌드 및 시사점
-    3. 전체적인 의견
-    """
-    try:
-        response = gemini_model.generate_content(report_prompt)
-        st.session_state.generated_report = response.text
-        st.success("보고서가 생성되었습니다.")
-    except Exception as e:
-        st.error(f"보고서 생성 중 오류 발생: {e}")
 
 # --- 제목과 버튼 영역 ---
 title_col, button_col = st.columns([1, 0.4])
 with title_col:
     st.title("📰 SK networks 뉴스")
+
+with button_col:
+    st.markdown("<div style='height: 40px;'></div>", unsafe_allow_html=True)
+    if st.button("⬇️ JPG 출력"):
+        st.markdown("<script>saveAsJpg();</script>", unsafe_allow_html=True)
+        st.success("JPG 파일 생성을 시작합니다.")
+
 
 st.markdown("---")
 
@@ -193,6 +188,7 @@ if search_query:
 # --- 제미나이 분석 섹션 ---
 st.markdown("---")
 
+# 동적 제목 생성 로직
 topic_value = ""
 if search_query:
     topic_value = f'"{search_query}"'
@@ -218,14 +214,17 @@ else:
     {articles_text}
     """
     
-    if st.button("✨ 트렌드 분석 시작"):
-        with st.spinner("제미나이가 뉴스 트렌드를 분석하고 있습니다..."):
-            try:
-                response = gemini_model.generate_content(analysis_prompt)
-                st.session_state.analysis_title = f"📰 {date_prefix} {topic_value} 트렌드"
-                st.session_state.analysis_result = response.text
-            except Exception as e:
-                st.error(f"제미나이 API 호출 중 오류 발생: {e}")
+    analyze_btn_col, jpg_btn_col = st.columns([0.25, 0.75])
+    
+    with analyze_btn_col:
+        if st.button("✨ 트렌드 분석 시작"):
+            with st.spinner("제미나이가 뉴스 트렌드를 분석하고 있습니다..."):
+                try:
+                    response = gemini_model.generate_content(analysis_prompt)
+                    st.session_state.analysis_title = f"📰 {date_prefix} {topic_value} 트렌드"
+                    st.session_state.analysis_result = response.text
+                except Exception as e:
+                    st.error(f"제미나이 API 호출 중 오류 발생: {e}")
 
     if 'analysis_result' in st.session_state and st.session_state.analysis_result:
         st.subheader(st.session_state.analysis_title)
@@ -240,32 +239,6 @@ else:
                     list_html += f'<li>{line.strip()}</li>'
         list_html += '</ol>'
         st.markdown(list_html, unsafe_allow_html=True)
-        
-        # '보고서 만들기' 버튼
-        if st.button("📝 보고서 만들기"):
-            with st.spinner("보고서를 생성하고 있습니다..."):
-                analysis_result_for_report = st.session_state.get('analysis_result', None)
-                if analysis_result_for_report:
-                    generate_report(filtered_df, analysis_result_for_report)
-                else:
-                    st.warning("먼저 '트렌드 분석'을 실행하여 분석 결과를 생성해 주세요.")
-                    
-st.markdown("---")
-
-if 'generated_report' in st.session_state:
-    report_col, download_col = st.columns([1, 0.2])
-    with report_col:
-        st.subheader("📄 보고서")
-        st.markdown(f'<div class="report-box">{st.session_state.generated_report}</div>', unsafe_allow_html=True)
-    
-    with download_col:
-        report_bytes = st.session_state.generated_report.encode('utf-8')
-        st.download_button(
-            label="📄 보고서 다운로드",
-            data=report_bytes,
-            file_name=f"SK_networks_뉴스_보고서_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
-            mime="text/plain"
-        )
 
 st.markdown("---")
 
